@@ -1,113 +1,146 @@
-use ejdb::Collection;
-use ejdb::Database;
 use ejdb::bson;
 use ejdb::bson::oid::ObjectId;
 use ejdb::query::{Q, QH};
+use ejdb::Collection;
+use ejdb::Database;
 use ejdb::Result;
+use std::time::{Duration, Instant};
 
-//creates collection
-fn createCollection(db: &Database, collection: String){
-    let coll = db.collection(collection).unwrap();
+const N: i64 = 1000000;
+
+struct DB {
+    db: Database,
 }
-
-//adds one record
-fn addone(db: &Database, collectionname: String, value: String)-> ObjectId {
-    // get collection/create collection if it does not exist
-    let coll = db.collection(collectionname).unwrap();
-
-    // create bson doc with given entries
-    let mut d = bson! {
-        "name" => value,
-        "count" => 10,
-        "age"=>40000
-    };
-
-    // saves the collection and returns the id of the doc
-    let inserted_id = coll.save(&d).unwrap();
-
-    // adds a new field in an uncommited bson document
-    //d.insert("name", inserted_id.clone());
-
-    // saves after the new change
-    // let inserted_id= coll.save(&d).unwrap();
-    // println!("{}", d);
-
-    // load is used to retrieve according to object id
-    // let d2 = coll.load(&inserted_id).unwrap().unwrap();
-
-    //println!("{}", d2);
-    // assert_eq!(d, d2);
-    return inserted_id
-}
-
-// adds multiple entries
-fn addmultiple(db: &Database){
-    let coll = db.collection("some_collection").unwrap();
-    coll.save_all(&[
-        bson!{ "name" => "Foo1", "count" => 123 },
-        bson!{ "name" => "Bar1", "items" => [4, 5, 6] }
-    ]).unwrap();
-}
-
-// searches for particular name
-fn search(db: &Database, collectionname: String){
-    let coll = db.collection(collectionname).unwrap();
-    // n is number of records
-
-    let allnames = ["Foo", "Foo1", "Bar1"];
-    let items = coll.query(Q.field("name").contained_in(allnames), QH.max(300))
-        .find().unwrap();
-    // `items` is an iterator which contains at maximum 12 records whose `name`
-    // field is either "foo", "bar" or "baz"
-
-    let items: Result<Vec<bson::Document>> = items.collect();  // collect them into a vector
-
-
-    // prints all entries
-    for item in items.unwrap() {
-        println!("{:?}", item);
+impl DB {
+    fn new(name: String) -> DB {
+        let db = Database::open(name).unwrap();
+        DB { db }
     }
 
-    // print database meta data
+    fn create_index(&self, collectionname: String, key: String) {
+        let collection = self.db.collection(collectionname).unwrap();
 
-    // let meta=db.get_metadata().unwrap();
-    // println!("{:?}",meta);
-}   
+        collection.index(key).number().set().unwrap();
+    }
 
-// just drops the collection
-fn deleteCollection(db: &Database, name: String){
-    db.drop_collection(name, true);
-}
+    fn addone(&self, collectionname: String, value: i64) -> ObjectId {
+        // get collection/create collection if it does not exist
+        let coll = self.db.collection(collectionname).unwrap();
 
-//deletes key in collection
-fn deleteKey(db: &Database, collectionname: String, key: String, inserted_id: ObjectId){
-    let coll = db.collection(collectionname).unwrap();
-    let mut doc = coll.load(&inserted_id).unwrap().unwrap();
-    doc.remove(&key);
-    coll.save(&doc).unwrap();
-}
+        // create bson doc with given entries
+        let d = bson! {
+            "user_id" => value,
+            "count" => 10,
+            "age"=>40000
+        };
 
-// changes count value of where name specified
-fn update(db: &Database, collectionname: String, name: String){
-    let coll = db.collection(collectionname).unwrap();
-    coll.query(Q.field("name").eq(name).set("count", 308329), QH.empty()).update().unwrap();
+        // saves the collection and returns the id of the doc
+        let id = coll.save(&d).unwrap();
+
+        id
+    }
+
+    fn find_one(&self, collectionname: String, id: i64) {
+        // this function finds one record with the given id
+        let coll = self.db.collection(collectionname).unwrap();
+
+        let query = Q.field("user_id").eq(id);
+        // println!("{:?}", query);
+
+        let _ = coll.query(&query, QH.max(1)).find_one().unwrap();
+    }
+
+    fn find_one_by_objectid(&self, collectionname: String, id: ObjectId) {
+        // this function finds one record with the given id
+        let coll = self.db.collection(collectionname).unwrap();
+
+        let query = Q.field("_id").eq(id);
+        // println!("{:?}", query);
+
+        let _ = coll.query(&query, QH.max(1)).find_one().unwrap();
+    }
 }
 
 fn main() {
-    //if db exists, it opens it. If db does not exist, it creates said db
-    let db = Database::open("test.db").unwrap();
-    println!("Add one");
-    let id= addone(&db, "some_collection".to_string(), "Foo".to_string());
-    println!("Add Multiple");
-    addmultiple(&db);
-    println!("Search all");
-    search(&db, "some_collection".to_string());
-    println!("Update Foo's count");
-    update(&db, "some_collection".to_string(), "Foo".to_string());
-    println!("Delete key");
-    deleteKey(&db, "some_collection".to_string(), "age".to_string(), id);
-    println!("Search again");
-    search(&db, "some_collection".to_string());
+    let db = DB::new("test.db".to_string());
+    let mut ids: Vec<ObjectId> = Vec::new();
 
-    //deleteCollection(&db, "some_collection".to_string());
-}   
+    // db.create_index("user_idx".to_string(), "user_id".to_string());
+
+    // // start timer
+    let now = Instant::now();
+
+    for i in 0..N {
+        let id = db.addone("user_idx".to_string(), i);
+
+        ids.push(id);
+
+        // if i % 1000 == 0 {
+        //     println!("{} records added", i);
+        // }
+    }
+    let elapsed = now.elapsed();
+
+    println!("Time taken to add {} records: {:?}", N, elapsed);
+    println!("Time taken to add 1 record: {:?}", elapsed / N as u32);
+    println!("Records per second: {}", N as f64 / elapsed.as_secs_f64());
+
+    // // start timer
+    let now = Instant::now();
+
+    for i in 0..N {
+        let id = ids.get(i as usize).unwrap();
+
+        db.find_one_by_objectid("user_idx".to_string(), id.clone());
+        // if i % 1000 == 0 {
+        //     println!("{} records searched", i);
+        // }
+    }
+
+    // for i in 0..N {
+    //     db.find_one("user_idx".to_string(), i);
+    //     // if i % 1000 == 0 {
+    //     //     println!("{} records searched", i);
+    //     // }
+    // }
+
+    let elapsed = now.elapsed();
+
+    println!("Time taken to search {} records: {:?}", N, elapsed);
+    println!("Time taken to search 1 record: {:?}", elapsed / N as u32);
+    println!("Records per second: {}", N as f64 / elapsed.as_secs_f64());
+
+    // println!("");
+    // println!("Testing without index");
+
+    // // do the same without index
+    // // start timer
+    // let now = Instant::now();
+
+    // for i in 0..N {
+    //     db.addone("user_standard".to_string(), i);
+    //     // if i % 1000 == 0 {
+    //     //     println!("{} records added", i);
+    //     // }
+    // }
+    // let elapsed = now.elapsed();
+
+    // println!("Time taken to add {} records: {:?}", N, elapsed);
+    // println!("Time taken to add 1 record: {:?}", elapsed / N as u32);
+    // println!("Records per second: {}", N as f64 / elapsed.as_secs_f64());
+
+    // // start timer
+    // let now = Instant::now();
+    // for i in 0..N {
+    //     db.find_one("user_standard".to_string(), i);
+    //     // if i % 1000 == 0 {
+    //     //     println!("{} records searched", i);
+    //     // }
+    // }
+
+    // let elapsed = now.elapsed();
+
+    // println!("Time taken to search {} records: {:?}", N, elapsed);
+    // println!("Time taken to search 1 record: {:?}", elapsed / N as u32);
+    // println!("Records per second: {}", N as f64 / elapsed.as_secs_f64());
+}
