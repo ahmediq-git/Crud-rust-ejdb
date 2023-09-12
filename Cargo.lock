@@ -244,13 +244,6 @@ checksum = "a26ae43d7bcc3b814de94796a5e736d4029efb0ee900c12e2d54c993ad1a1e07"
 
 [[package]]
 name = "ejdb"
-version = "0.1.0"
-dependencies = [
- "ejdb 0.4.1",
-]
-
-[[package]]
-name = "ejdb"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "357e731a0d8ebe0138f578ae0d00f6e1101a1e91504503d98b203ce8f8fde981"
@@ -273,6 +266,13 @@ dependencies = [
  "cmake",
  "libc",
  "pkg-config",
+]
+
+[[package]]
+name = "ejdb-test"
+version = "0.1.0"
+dependencies = [
+ "ejdb",
 ]
 
 [[package]]
