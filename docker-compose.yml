@@ -1,0 +1,14 @@
+version: '1'
+
+services:
+  crud:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: root
+    volumes:
+      - .:/home/crud
+    container_name: crud
+    command: /bin/bash
+    stdin_open: true
+    tty: true
