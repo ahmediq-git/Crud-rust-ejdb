@@ -5,6 +5,8 @@ use ejdb::Collection;
 use ejdb::Database;
 use ejdb::Result;
 use std::time::{Duration, Instant};
+use rand::Rng;
+use rand::prelude::SliceRandom;
 
 const N: i64 = 1000000;
 
@@ -59,44 +61,79 @@ impl DB {
 
         let _ = coll.query(&query, QH.max(1)).find_one().unwrap();
     }
+
+    fn addmillion(&self, collectionname: String){
+        let coll = self.db.collection(collectionname).unwrap();
+        let mut arr = Vec::with_capacity(1_000_000);
+    
+        for i in 0..N {
+            let d = bson! {
+                "user_id" => i,
+                "count" => 10,
+                "age"=>40000
+            };
+            arr.push(d);
+        }
+        let start_time = Instant::now();
+        coll.save_all(&arr).unwrap();
+        let end_time = Instant::now();
+        let duration = end_time.duration_since(start_time);
+        println!("Time to Save Batch of 1000,000 Documents: {:?}", duration);
+    }
 }
 
 fn main() {
     let db = DB::new("test.db".to_string());
     let mut ids: Vec<ObjectId> = Vec::new();
 
-    // db.create_index("user_idx".to_string(), "user_id".to_string());
+    // REVIEW: To run benchmarks for indexing uncomment the following and comment if you require otherwise
+    db.create_index("user_idx".to_string(), "user_id".to_string());
 
     // // start timer
-    let now = Instant::now();
 
-    for i in 0..N {
-        let id = db.addone("user_idx".to_string(), i);
+    // REVIEW: Sequential inserts
+    // let now = Instant::now();
 
-        ids.push(id);
+    // for i in 0..N {
+    //     let id = db.addone("user_idx".to_string(), i);
 
-        // if i % 1000 == 0 {
-        //     println!("{} records added", i);
-        // }
-    }
-    let elapsed = now.elapsed();
+    //     ids.push(id);
 
-    println!("Time taken to add {} records: {:?}", N, elapsed);
-    println!("Time taken to add 1 record: {:?}", elapsed / N as u32);
-    println!("Records per second: {}", N as f64 / elapsed.as_secs_f64());
+    //     // if i % 1000 == 0 {
+    //     //     println!("{} records added", i);
+    //     // }
 
+        
+    // }
+    // let elapsed = now.elapsed();
+    // println!("EJDB Sequential Writes");
+    // println!("Time taken to add {} records: {:?}", N, elapsed);
+    // println!("Time taken to add 1 record: {:?}", elapsed / N as u32);
+    // println!("Records per second: {}", N as f64 / elapsed.as_secs_f64());
+
+    // REVIEW: Batch writes
+    // let now = Instant::now();
+    // println!("EJDB Batch Writes");
+    // db.addmillion("user_idx".to_string());
+
+    // let elapsed = now.elapsed();
+    // println!("Time taken to add {} records: {:?}", N, elapsed);
+    // println!("Time taken to add 1 record: {:?}", elapsed / N as u32);
+    // println!("Records per second: {}", N as f64 / elapsed.as_secs_f64());
+
+    //REVIEW: Sequential Reads
     // // start timer
-    let now = Instant::now();
+    // let now = Instant::now();
 
-    for i in 0..N {
-        let id = ids.get(i as usize).unwrap();
+    // // for i in 0..N {
+    // //     let id = ids.get(i as usize).unwrap();
 
-        db.find_one_by_objectid("user_idx".to_string(), id.clone());
-        // if i % 1000 == 0 {
-        //     println!("{} records searched", i);
-        // }
-    }
-
+    // //     db.find_one_by_objectid("user_idx".to_string(), id.clone());
+    // //     // if i % 1000 == 0 {
+    // //     //     println!("{} records searched", i);
+    // //     // }
+    // // }
+    // println!("EJDB Sequential Reads");
     // for i in 0..N {
     //     db.find_one("user_idx".to_string(), i);
     //     // if i % 1000 == 0 {
@@ -104,11 +141,37 @@ fn main() {
     //     // }
     // }
 
+    // let elapsed = now.elapsed();
+
+    // println!("Time taken to search {} records: {:?}", N, elapsed);
+    // println!("Time taken to search 1 record: {:?}", elapsed / N as u32);
+    // println!("Records per second: {}", N as f64 / elapsed.as_secs_f64());
+
+
+    //REVIEW: Random Reads
+    // start timer
+    println!("EJDB Random Reads");
+    // Create a vector of indices to track which records have been read.
+    let mut indices = (0..N).collect::<Vec<_>>();
+
+    // Shuffle the indices randomly.
+    let mut rng = rand::thread_rng();
+    indices.shuffle(&mut rng);
+
+    // Measure the time taken for random reads.
+    let now = Instant::now();
+
+    for i in 0..N {
+            let random_index = indices[i as usize];
+            db.find_one("user_idx".to_string(), random_index);
+    }
+
     let elapsed = now.elapsed();
 
     println!("Time taken to search {} records: {:?}", N, elapsed);
     println!("Time taken to search 1 record: {:?}", elapsed / N as u32);
     println!("Records per second: {}", N as f64 / elapsed.as_secs_f64());
+    
 
     // println!("");
     // println!("Testing without index");
